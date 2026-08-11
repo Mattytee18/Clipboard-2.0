@@ -246,6 +246,27 @@ else:
     FAMILY, MONO = "Inter", "DejaVu Sans Mono"
 
 
+# ── User settings (persisted) ───────────────────────────────────────────────────
+
+SETTINGS_FILE = os.path.join(os.path.dirname(CATS_FILE), "clipboard_settings.json")
+
+
+def load_settings():
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_settings(data):
+    try:
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
+
+
 def _mode_is_dark():
     return ctk.get_appearance_mode() == "Dark"
 
@@ -412,8 +433,8 @@ class ClipboardManager:
     def __init__(self, root):
         self.root = root
         self.root.title("Clipboard Manager")
-        self.root.geometry("900x680")
-        self.root.minsize(760, 560)
+        self.root.geometry("980x760")
+        self.root.minsize(720, 540)
         self.root.configure(fg_color=COL_BG)
 
         # Fonts (root must exist first)
@@ -424,6 +445,7 @@ class ClipboardManager:
         self.f_sm    = ctk.CTkFont(family=FAMILY, size=12)
         self.f_tiny  = ctk.CTkFont(family=FAMILY, size=11, weight="bold")
         self.f_mono  = ctk.CTkFont(family=MONO, size=12)
+        self.f_micro = ctk.CTkFont(family=FAMILY, size=11)
 
         self.items = load_items()
         if _ensure_ids(self.items):
@@ -432,6 +454,8 @@ class ClipboardManager:
         if _cleanup_categories(self.categories, self.items):
             save_categories(self.categories)
 
+        self._settings = load_settings()
+        self.density = int(self._settings.get("density", 2))
         self._active_category = None      # None = "All Snippets"
         self.filtered = []
         self._sel = None                  # selected filtered index
@@ -469,6 +493,17 @@ class ClipboardManager:
         self.status_lbl = ctk.CTkLabel(header, text="", font=self.f_ui_b,
                                        text_color=COL_SUCCESS)
         self.status_lbl.pack(side="right", padx=14)
+        dens = ctk.CTkFrame(header, fg_color="transparent")
+        dens.pack(side="right", padx=(0, 12))
+        ctk.CTkLabel(dens, text="Density", font=self.f_sm,
+                     text_color=COL_MUTED).pack(side="left", padx=(0, 8))
+        self._density_slider = ctk.CTkSlider(
+            dens, from_=0, to=2, number_of_steps=2, width=120,
+            command=self._set_density, fg_color=COL_PANEL2,
+            progress_color=COL_ACCENT, button_color=COL_ACCENT,
+            button_hover_color=COL_ACCENT_HOV)
+        self._density_slider.set(self.density)
+        self._density_slider.pack(side="left")
 
         # Two-column body
         body = ctk.CTkFrame(main, fg_color="transparent")
@@ -598,7 +633,7 @@ class ClipboardManager:
                                  border_width=1, border_color=COL_BORDER)
         list_card.pack(fill="both", expand=True)
         self.snip_scroll = ctk.CTkScrollableFrame(list_card, fg_color="transparent")
-        self.snip_scroll.pack(fill="both", expand=True, padx=8, pady=8)
+        self.snip_scroll.pack(fill="both", expand=True, padx=6, pady=4)
 
         # Preview
         prev = ctk.CTkFrame(right, fg_color=COL_PANEL2, corner_radius=12)
@@ -675,6 +710,16 @@ class ClipboardManager:
 
     # ── Theme toggle ────────────────────────────────────────────────────────────
 
+    def _set_density(self, value):
+        d = int(round(float(value)))
+        if d == self.density:
+            return
+        self.density = d
+        self._settings["density"] = d
+        save_settings(self._settings)
+        self._refresh_cat_list()
+        self._refresh_list()
+
     def _toggle_theme(self):
         dark = not _mode_is_dark()
         ctk.set_appearance_mode("dark" if dark else "light")
@@ -701,14 +746,18 @@ class ClipboardManager:
         self._paint_cat_selection()
 
     def _make_cat_row(self, pos, key, label, cnt):
-        f = ctk.CTkFrame(self.cat_scroll, fg_color="transparent", corner_radius=8,
-                         height=34)
-        f.pack(fill="x", pady=1)
+        d = self.density
+        cpad = (1, 3, 6)[d]
+        ch = (22, 26, 28)[d]
+        f = ctk.CTkFrame(self.cat_scroll, fg_color="transparent", corner_radius=6)
+        f.pack(fill="x", pady=(0 if d == 0 else 1))
         icon = "🗂" if key != "__all__" else "▦"
-        name_lbl = ctk.CTkLabel(f, text=f"{icon}  {label}", font=self.f_ui,
+        name_lbl = ctk.CTkLabel(f, text=f"{icon}  {label}", height=ch,
+                                font=(self.f_sm if d == 0 else self.f_ui),
                                 text_color=COL_TEXT, anchor="w")
-        name_lbl.pack(side="left", padx=(10, 4), pady=6)
-        cnt_lbl = ctk.CTkLabel(f, text=str(cnt), font=self.f_sm,
+        name_lbl.pack(side="left", padx=(10, 4), pady=cpad)
+        cnt_lbl = ctk.CTkLabel(f, text=str(cnt), height=ch,
+                               font=(self.f_tiny if d == 0 else self.f_sm),
                                text_color=COL_MUTED, anchor="e")
         cnt_lbl.pack(side="right", padx=(0, 12))
 
@@ -908,28 +957,38 @@ class ClipboardManager:
             self.preview_var.set("Select a snippet to preview it here")
 
     def _make_snip_row(self, pos, item):
-        f = ctk.CTkFrame(self.snip_scroll, fg_color="transparent", corner_radius=10)
-        f.pack(fill="x", pady=2)
+        d = self.density
+        f = ctk.CTkFrame(self.snip_scroll, fg_color="transparent",
+                         corner_radius=(4 if d == 0 else 8 if d == 1 else 10))
+        f.pack(fill="x", pady=(0 if d == 0 else 1 if d == 1 else 2))
 
         main = item.get("label") or item["text"].split("\n", 1)[0]
-        main = main[:64] + ("…" if len(main) > 64 else "")
-        sub = item["text"].replace("\n", " ").strip()
-        if item.get("label"):
-            sub = sub[:78] + ("…" if len(sub) > 78 else "")
-        else:
-            sub = sub[64:142].strip()
-            sub = ("…" + sub) if sub else ""
+        main = main[:88] + ("…" if len(main) > 88 else "")
 
-        title = ctk.CTkLabel(f, text=main, font=self.f_ui_b, text_color=COL_TEXT,
-                             anchor="w", justify="left")
-        title.pack(fill="x", padx=14, pady=(8, 0))
         subl = None
-        if sub:
-            subl = ctk.CTkLabel(f, text=sub, font=self.f_sm, text_color=COL_MUTED,
-                                anchor="w", justify="left")
-            subl.pack(fill="x", padx=14, pady=(0, 8))
+        if d >= 2:
+            title = ctk.CTkLabel(f, text=main, font=self.f_ui_b,
+                                 text_color=COL_TEXT, anchor="w", justify="left")
+            sub = item["text"].replace("\n", " ").strip()
+            if item.get("label"):
+                sub = sub[:78] + ("…" if len(sub) > 78 else "")
+            else:
+                sub = sub[88:168].strip()
+                sub = ("…" + sub) if sub else ""
+            title.pack(fill="x", padx=14, pady=(8, 0))
+            if sub:
+                subl = ctk.CTkLabel(f, text=sub, font=self.f_sm,
+                                    text_color=COL_MUTED, anchor="w", justify="left")
+                subl.pack(fill="x", padx=14, pady=(0, 8))
+            else:
+                title.pack_configure(pady=(10, 10))
         else:
-            title.pack_configure(pady=(10, 10))
+            H = 20 if d == 0 else 26
+            fnt = self.f_micro if d == 0 else self.f_ui
+            title = ctk.CTkLabel(f, text=main, font=fnt, height=H,
+                                 text_color=COL_TEXT, anchor="w", justify="left")
+            title.pack(fill="x", padx=(10 if d == 0 else 14),
+                       pady=(1 if d == 0 else 2))
 
         r = {"frame": f, "title": title, "sub": subl, "pos": pos}
         self._snip_rows.append(r)
