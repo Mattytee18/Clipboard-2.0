@@ -568,6 +568,20 @@ class ClipboardManager:
         ctk.CTkLabel(left, text="Right-click a snippet to file it under a category",
                      font=self.f_sm, text_color=COL_FAINT, wraplength=280,
                      justify="left").pack(anchor="w", pady=(10, 0))
+        io_row = ctk.CTkFrame(left, fg_color="transparent")
+        io_row.pack(fill="x", pady=(10, 0))
+        ctk.CTkButton(io_row, text="📥  Import", command=self._import_all,
+                      font=self.f_sm, height=32, corner_radius=8,
+                      fg_color="transparent", hover_color=COL_PANEL2,
+                      text_color=COL_MUTED, border_width=1,
+                      border_color=COL_BORDER).pack(side="left", fill="x",
+                                                    expand=True, padx=(0, 4))
+        ctk.CTkButton(io_row, text="📤  Export", command=self._export_all,
+                      font=self.f_sm, height=32, corner_radius=8,
+                      fg_color="transparent", hover_color=COL_PANEL2,
+                      text_color=COL_MUTED, border_width=1,
+                      border_color=COL_BORDER).pack(side="left", fill="x",
+                                                    expand=True, padx=(4, 0))
 
     # ── Right column ──────────────────────────────────────────────────────────
 
@@ -1268,6 +1282,90 @@ class ClipboardManager:
         return _ConfirmDialog(self.root, self, title, message).ok
 
     # ── Status flash ────────────────────────────────────────────────────────────
+
+    # ── Import / Export (full backup) ────────────────────────────────────────────
+
+    def _export_all(self):
+        from tkinter import filedialog
+        import datetime
+        path = filedialog.asksaveasfilename(
+            parent=self.root, title="Export snippets & settings",
+            defaultextension=".json",
+            initialfile="clipboard-manager-backup.json",
+            filetypes=[("JSON backup", "*.json"), ("All files", "*.*")])
+        if not path:
+            return
+        bundle = {
+            "app": "Clipboard Manager",
+            "version": 1,
+            "exported": datetime.datetime.now().isoformat(timespec="seconds"),
+            "items": self.items,
+            "categories": self.categories,
+            "settings": self._settings,
+        }
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(bundle, f, indent=2, ensure_ascii=False)
+            self._flash("✓  Exported backup")
+        except Exception:
+            self._flash("Export failed")
+
+    def _import_all(self):
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            parent=self.root, title="Import snippets & settings",
+            filetypes=[("JSON backup", "*.json"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            self._flash("Could not read that file")
+            return
+
+        items = cats = settings = None
+        if isinstance(data, dict) and "items" in data:
+            items = data.get("items")
+            cats = data.get("categories")
+            settings = data.get("settings")
+        elif isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            cats = data
+        if items is None and cats is None:
+            self._flash("Not a valid backup file")
+            return
+
+        if not self._confirm(
+                "Import backup",
+                "Replace your current snippets and categories with the imported "
+                "file? Export first if you want to keep a copy — this can't be undone."):
+            return
+
+        if items is not None:
+            self.items = items if isinstance(items, list) else []
+            _ensure_ids(self.items)
+            save_items(self.items)
+        if cats is not None and isinstance(cats, dict):
+            self.categories = cats
+        _cleanup_categories(self.categories, self.items)
+        save_categories(self.categories)
+        if isinstance(settings, dict):
+            self._settings.update(settings)
+            self.density = int(self._settings.get("density", self.density))
+            save_settings(self._settings)
+            try:
+                self._density_slider.set(self.density)
+            except Exception:
+                pass
+
+        self._active_category = None
+        self._sel = None
+        self._snippets_lbl.configure(text="Saved snippets")
+        self._refresh_cat_list()
+        self._refresh_list()
+        self._flash("✓  Imported backup")
 
     def _flash(self, msg):
         if self._status_job:
