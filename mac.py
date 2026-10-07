@@ -951,14 +951,18 @@ class ClipboardManager:
         for r in self._snip_rows:
             r["frame"].destroy()
         self._snip_rows = []
+        if getattr(self, "_empty_lbl", None) is not None:
+            self._empty_lbl.destroy()
+            self._empty_lbl = None
         for pos, (real_i, item) in enumerate(self.filtered):
             self._make_snip_row(pos, item)
 
         if not self.filtered:
-            ctk.CTkLabel(self.snip_scroll,
-                         text="No snippets here yet." if not query
-                         else "No matches.", font=self.f_ui,
-                         text_color=COL_FAINT).pack(pady=30)
+            self._empty_lbl = ctk.CTkLabel(
+                self.snip_scroll,
+                text="No snippets here yet." if not query else "No matches.",
+                font=self.f_ui, text_color=COL_FAINT)
+            self._empty_lbl.pack(pady=30)
 
         n = len(self.items); shown = len(self.filtered)
         self.count_var.set(
