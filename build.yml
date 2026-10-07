@@ -1,0 +1,155 @@
+name: Build Clipboard Manager
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pyinstaller pyperclip customtkinter
+
+      - name: Show repo files
+        run: python -c "import os; print(os.listdir('.'))"
+
+      - name: Build
+        run: |
+          python -c "
+          import os, subprocess, sys
+          files = os.listdir('.')
+          open('version.txt', 'w').write(str(${{ github.run_number }}))
+          print('All files:', files)
+          assert 'windows.pyw' in files, 'windows.pyw not found!'
+          assert 'clipboard_items.json' in files, 'clipboard_items.json not found!'
+          assert 'clipboard_categories.json' in files, 'clipboard_categories.json not found!'
+          result = subprocess.run([
+              sys.executable, '-m', 'PyInstaller',
+              '--name', 'Clipboard Manager',
+              '--windowed',
+              '--onefile',
+              '--noconfirm',
+              '--clean',
+              '--hidden-import', 'pyperclip',
+              '--collect-all', 'customtkinter',
+              '--collect-all', 'darkdetect',
+              '--icon', 'icon.ico',
+              '--add-data', 'icon.ico;.',
+              '--add-data', 'icon.png;.',
+              '--add-data', 'clipboard_items.json;.',
+              '--add-data', 'version.txt;.',
+              '--add-data', 'clipboard_categories.json;.',
+              'windows.pyw'
+          ])
+          sys.exit(result.returncode)
+          "
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Clipboard-Manager-Windows
+          path: "dist/Clipboard Manager.exe"
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip3 install pyinstaller pyperclip customtkinter
+
+      - name: Build
+        run: |
+          python3 -c "
+          import os, subprocess, sys
+          files = os.listdir('.')
+          open('version.txt', 'w').write(str(${{ github.run_number }}))
+          print('All files:', files)
+          assert 'mac.py' in files, 'mac.py not found!'
+          assert 'clipboard_items.json' in files, 'clipboard_items.json not found!'
+          assert 'clipboard_categories.json' in files, 'clipboard_categories.json not found!'
+          result = subprocess.run([
+              sys.executable, '-m', 'PyInstaller',
+              '--name', 'Clipboard Manager',
+              '--windowed',
+              '--onedir',
+              '--noconfirm',
+              '--clean',
+              '--hidden-import', 'pyperclip',
+              '--collect-all', 'customtkinter',
+              '--collect-all', 'darkdetect',
+              '--icon', 'icon.icns',
+              '--osx-bundle-identifier', 'com.clipboardmanager.app',
+              '--add-data', 'icon.png:.',
+              '--add-data', 'clipboard_items.json:.',
+              '--add-data', 'version.txt:.',
+              '--add-data', 'clipboard_categories.json:.',
+              'mac.py'
+          ])
+          sys.exit(result.returncode)
+          "
+
+      - name: Zip app
+        run: cd dist && zip -r "Clipboard-Manager-Mac.zip" "Clipboard Manager.app"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Clipboard-Manager-Mac
+          path: dist/Clipboard-Manager-Mac.zip
+
+  release:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: Clipboard-Manager-Windows
+          path: release/
+
+      - name: Download Mac
+        uses: actions/download-artifact@v4
+        with:
+          name: Clipboard-Manager-Mac
+          path: release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "Clipboard Manager — Build ${{ github.run_number }}"
+          body: |
+            ## Download
+
+            | Platform | File |
+            |----------|------|
+            | 🪟 Windows | `Clipboard Manager.exe` — double-click to run |
+            | 🍎 Mac | `Clipboard-Manager-Mac.zip` — unzip, drag .app to Applications |
+
+            > **First launch:** Snippets are pre-loaded automatically.
+            > **Mac:** Right-click the app → Open → Open (bypasses Gatekeeper)
+          files: |
+            release/Clipboard Manager.exe
+            release/Clipboard-Manager-Mac.zip
+          draft: false
+          prerelease: false
