@@ -757,6 +757,8 @@ class ClipboardManager:
         dark = not _mode_is_dark()
         ctk.set_appearance_mode("dark" if dark else "light")
         self._theme_btn.configure(text="🌙" if dark else "☀")
+        self._refresh_cat_list()
+        self._refresh_list()
 
     # ── Category list ───────────────────────────────────────────────────────────
 
@@ -780,18 +782,17 @@ class ClipboardManager:
 
     def _make_cat_row(self, pos, key, label, cnt):
         d = self.density
-        cpad = (1, 3, 6)[d]
-        ch = (22, 26, 28)[d]
-        f = ctk.CTkFrame(self.cat_scroll, fg_color="transparent", corner_radius=6)
+        cpad = (2, 4, 6)[d]
+        bg = _c(COL_PANEL)
+        f = tk.Frame(self.cat_scroll, bg=bg, bd=0, highlightthickness=0)
         f.pack(fill="x", pady=(0 if d == 0 else 1))
         icon = "🗂" if key != "__all__" else "▦"
-        name_lbl = ctk.CTkLabel(f, text=f"{icon}  {label}", height=ch,
-                                font=(self.f_sm if d == 0 else self.f_ui),
-                                text_color=COL_TEXT, anchor="w")
+        name_lbl = tk.Label(f, text=f"{icon}  {label}",
+                            font=(FAMILY, 11 if d == 0 else 13),
+                            bg=bg, fg=_c(COL_TEXT), anchor="w")
         name_lbl.pack(side="left", padx=(10, 4), pady=cpad)
-        cnt_lbl = ctk.CTkLabel(f, text=str(cnt), height=ch,
-                               font=(self.f_tiny if d == 0 else self.f_sm),
-                               text_color=COL_MUTED, anchor="e")
+        cnt_lbl = tk.Label(f, text=str(cnt), font=(FAMILY, 11),
+                           bg=bg, fg=_c(COL_MUTED), anchor="e")
         cnt_lbl.pack(side="right", padx=(0, 12))
 
         r = {"frame": f, "name_lbl": name_lbl, "cnt_lbl": cnt_lbl,
@@ -807,19 +808,23 @@ class ClipboardManager:
             w.bind("<Enter>", lambda e, rr=r: self._cat_hover(rr, True))
             w.bind("<Leave>", lambda e, rr=r: self._cat_hover(rr, False))
 
+    def _paint_cat(self, r, bg, accent=False):
+        r["frame"].configure(bg=bg)
+        r["name_lbl"].configure(bg=bg, fg=(_c(COL_ACCENT) if accent else _c(COL_TEXT)))
+        r["cnt_lbl"].configure(bg=bg)
+
     def _cat_hover(self, r, on):
         active = (r["key"] == "__all__" and self._active_category is None) or \
                  (r["key"] == self._active_category)
         if active:
             return
-        r["frame"].configure(fg_color=COL_PANEL2 if on else "transparent")
+        self._paint_cat(r, _c(COL_PANEL2) if on else _c(COL_PANEL))
 
     def _paint_cat_selection(self):
         for r in self._cat_rows:
             active = (r["key"] == "__all__" and self._active_category is None) or \
                      (r["key"] == self._active_category)
-            r["frame"].configure(fg_color=COL_SEL if active else "transparent")
-            r["name_lbl"].configure(text_color=COL_ACCENT if active else COL_TEXT)
+            self._paint_cat(r, _c(COL_SEL) if active else _c(COL_PANEL), accent=active)
 
     def _select_category(self, key):
         self._active_category = None if key == "__all__" else key
@@ -846,7 +851,7 @@ class ClipboardManager:
             return
         self._cd_dst = t
         for i, r in enumerate(self._cat_rows):
-            r["frame"].configure(fg_color=COL_DRAG if i == t else "transparent")
+            self._paint_cat(r, _c(COL_DRAG) if i == t else _c(COL_PANEL))
 
     def _cat_release(self, pos):
         src, dst, moved = self._cd_src, self._cd_dst, self._cd_moved
@@ -995,8 +1000,8 @@ class ClipboardManager:
 
     def _make_snip_row(self, pos, item):
         d = self.density
-        f = ctk.CTkFrame(self.snip_scroll, fg_color="transparent",
-                         corner_radius=(4 if d == 0 else 8 if d == 1 else 10))
+        bg = _c(COL_PANEL)
+        f = tk.Frame(self.snip_scroll, bg=bg, bd=0, highlightthickness=0)
         f.pack(fill="x", pady=(0 if d == 0 else 1 if d == 1 else 2))
 
         main = item.get("label") or item["text"].split("\n", 1)[0]
@@ -1004,28 +1009,27 @@ class ClipboardManager:
 
         subl = None
         if d >= 2:
-            title = ctk.CTkLabel(f, text=main, font=self.f_ui_b,
-                                 text_color=COL_TEXT, anchor="w", justify="left")
+            title = tk.Label(f, text=main, font=(FAMILY, 13, "bold"),
+                             bg=bg, fg=_c(COL_TEXT), anchor="w", justify="left")
             sub = item["text"].replace("\n", " ").strip()
             if item.get("label"):
                 sub = sub[:78] + ("…" if len(sub) > 78 else "")
             else:
                 sub = sub[88:168].strip()
                 sub = ("…" + sub) if sub else ""
-            title.pack(fill="x", padx=14, pady=(8, 0))
+            title.pack(fill="x", padx=14, pady=(7, 0))
             if sub:
-                subl = ctk.CTkLabel(f, text=sub, font=self.f_sm,
-                                    text_color=COL_MUTED, anchor="w", justify="left")
-                subl.pack(fill="x", padx=14, pady=(0, 8))
+                subl = tk.Label(f, text=sub, font=(FAMILY, 11),
+                                bg=bg, fg=_c(COL_MUTED), anchor="w", justify="left")
+                subl.pack(fill="x", padx=14, pady=(0, 7))
             else:
-                title.pack_configure(pady=(10, 10))
+                title.pack_configure(pady=(9, 9))
         else:
-            H = 20 if d == 0 else 26
-            fnt = self.f_micro if d == 0 else self.f_ui
-            title = ctk.CTkLabel(f, text=main, font=fnt, height=H,
-                                 text_color=COL_TEXT, anchor="w", justify="left")
+            size = 11 if d == 0 else 13
+            title = tk.Label(f, text=main, font=(FAMILY, size),
+                             bg=bg, fg=_c(COL_TEXT), anchor="w", justify="left")
             title.pack(fill="x", padx=(10 if d == 0 else 14),
-                       pady=(1 if d == 0 else 2))
+                       pady=(2 if d == 0 else 4))
 
         r = {"frame": f, "title": title, "sub": subl, "pos": pos}
         self._snip_rows.append(r)
@@ -1040,16 +1044,21 @@ class ClipboardManager:
             w.bind("<Enter>", lambda e, rr=r: self._snip_hover(rr, True))
             w.bind("<Leave>", lambda e, rr=r: self._snip_hover(rr, False))
 
+    def _paint_snip(self, r, bg, accent=False):
+        r["frame"].configure(bg=bg)
+        r["title"].configure(bg=bg, fg=(_c(COL_ACCENT) if accent else _c(COL_TEXT)))
+        if r.get("sub"):
+            r["sub"].configure(bg=bg)
+
     def _snip_hover(self, r, on):
         if r["pos"] == self._sel:
             return
-        r["frame"].configure(fg_color=COL_PANEL2 if on else "transparent")
+        self._paint_snip(r, _c(COL_PANEL2) if on else _c(COL_PANEL))
 
     def _paint_snip_selection(self):
         for r in self._snip_rows:
             sel = r["pos"] == self._sel
-            r["frame"].configure(fg_color=COL_SEL if sel else "transparent")
-            r["title"].configure(text_color=COL_ACCENT if sel else COL_TEXT)
+            self._paint_snip(r, _c(COL_SEL) if sel else _c(COL_PANEL), accent=sel)
 
     def _select_snip(self, pos):
         if pos is None or pos >= len(self.filtered):
@@ -1075,11 +1084,11 @@ class ClipboardManager:
         self._sd_dst = t
         for i, r in enumerate(self._snip_rows):
             if i == t:
-                r["frame"].configure(fg_color=COL_DRAG)
+                self._paint_snip(r, _c(COL_DRAG))
             elif i == self._sel:
-                r["frame"].configure(fg_color=COL_SEL)
+                self._paint_snip(r, _c(COL_SEL), accent=True)
             else:
-                r["frame"].configure(fg_color="transparent")
+                self._paint_snip(r, _c(COL_PANEL))
 
     def _snip_release(self, pos):
         src, dst, moved = self._sd_src, self._sd_dst, self._sd_moved
@@ -1438,20 +1447,21 @@ class ClipboardManager:
             tag = data.get("tag_name", "") or ""
             url = data.get("html_url") or f"https://github.com/{GITHUB_REPO}/releases/latest"
             latest = int("".join(ch for ch in tag if ch.isdigit()) or "0")
-            self.root.after(0, lambda: self._update_result(latest, url))
+            asset = self._pick_asset(data.get("assets", []) or [])
+            self.root.after(0, lambda: self._update_result(latest, url, asset))
         except Exception:
             self.root.after(0, lambda: self._flash("Couldn't check — are you online?"))
 
-    def _update_result(self, latest, url):
+    def _update_result(self, latest, url, asset=None):
         cur = self._build_no
         if latest and latest > cur:
-            self._show_update_dialog(latest, cur, url)
+            self._show_update_dialog(latest, cur, url, asset)
         elif cur:
             self._flash(f"✓  You're up to date (build {cur})")
         else:
             self._flash("✓  You're on the latest version")
 
-    def _show_update_dialog(self, latest, cur, url):
+    def _show_update_dialog(self, latest, cur, url, asset=None):
         import webbrowser
         win = ctk.CTkToplevel(self.root)
         win.title("Update available")
@@ -1478,15 +1488,80 @@ class ClipboardManager:
                 self._flash("Couldn't open browser")
             win.destroy()
 
-        ctk.CTkButton(btns, text="Download", command=download, font=self.f_ui_b,
-                      height=38, corner_radius=10, fg_color=COL_ACCENT,
-                      hover_color=COL_ACCENT_HOV, text_color="#FFFFFF").pack(side="right")
+        can_auto = (sys.platform == "win32" and getattr(sys, "frozen", False)
+                    and bool(asset))
+        if can_auto:
+            def update_now():
+                win.destroy()
+                self._start_self_update(asset)
+            ctk.CTkButton(btns, text="Update now", command=update_now,
+                          font=self.f_ui_b, height=38, corner_radius=10,
+                          fg_color=COL_ACCENT, hover_color=COL_ACCENT_HOV,
+                          text_color="#FFFFFF").pack(side="right")
+        else:
+            ctk.CTkButton(btns, text="Download", command=download, font=self.f_ui_b,
+                          height=38, corner_radius=10, fg_color=COL_ACCENT,
+                          hover_color=COL_ACCENT_HOV, text_color="#FFFFFF").pack(side="right")
         ctk.CTkButton(btns, text="Later", command=win.destroy, font=self.f_ui,
                       height=38, width=90, corner_radius=10, fg_color=COL_PANEL2,
                       hover_color=COL_BORDER, text_color=COL_TEXT
                       ).pack(side="right", padx=(0, 10))
         win.after(60, lambda: (win.grab_set(), win.focus_force()))
         win.geometry(f"+{self.root.winfo_rootx() + 110}+{self.root.winfo_rooty() + 120}")
+
+    def _pick_asset(self, assets):
+        """Pick the release asset for this platform (.exe on Windows, .zip on Mac)."""
+        want = ".exe" if sys.platform == "win32" else ".zip"
+        for a in assets:
+            name = (a.get("name") or "").lower()
+            if name.endswith(want):
+                return a.get("browser_download_url")
+        return None
+
+    def _start_self_update(self, asset_url):
+        import threading
+        self._flash("Downloading update… the app will restart")
+        threading.Thread(target=self._self_update_worker,
+                         args=(asset_url,), daemon=True).start()
+
+    def _self_update_worker(self, asset_url):
+        import urllib.request, os, subprocess, shutil
+        exe = sys.executable
+        exe_dir = os.path.dirname(exe)
+        base = os.path.basename(exe)
+        new_exe = os.path.join(exe_dir, "Clipboard Manager.new.exe")
+        try:
+            req = urllib.request.Request(
+                asset_url, headers={"User-Agent": "ClipboardManager"})
+            with urllib.request.urlopen(req, timeout=180) as r, open(new_exe, "wb") as f:
+                shutil.copyfileobj(r, f)
+        except Exception:
+            self.root.after(0, lambda: self._flash("Update download failed"))
+            return
+        try:
+            bat = os.path.join(exe_dir, "_cm_update.bat")
+            lines = [
+                "@echo off",
+                "setlocal",
+                ":wait",
+                'tasklist /FI "IMAGENAME eq %s" | find /I "%s" >nul' % (base, base),
+                "if not errorlevel 1 (",
+                "  timeout /t 1 /nobreak >nul",
+                "  goto wait",
+                ")",
+                'move /Y "%s" "%s" >nul' % (new_exe, exe),
+                'start "" "%s"' % exe,
+                'del "%~f0"',
+            ]
+            with open(bat, "w", encoding="utf-8") as f:
+                f.write("\r\n".join(lines) + "\r\n")
+            flags = (getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                     | getattr(subprocess, "DETACHED_PROCESS", 0))
+            subprocess.Popen(["cmd", "/c", bat], creationflags=flags, close_fds=True)
+        except Exception:
+            self.root.after(0, lambda: self._flash("Couldn't start the updater"))
+            return
+        self.root.after(400, self.root.destroy)
 
     def _flash(self, msg):
         if self._status_job:
