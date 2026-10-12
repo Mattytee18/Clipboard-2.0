@@ -1042,7 +1042,6 @@ class ClipboardManager:
             w.bind("<Button-1>", lambda e, p=pos: self._snip_press(p))
             w.bind("<B1-Motion>", lambda e: self._snip_motion(e))
             w.bind("<ButtonRelease-1>", lambda e, p=pos: self._snip_release(p))
-            w.bind("<Double-Button-1>", lambda e, p=pos: self._snip_dbl(p))
             w.bind("<Button-3>", lambda e, p=pos: self._snip_context(e, p))
             w.bind("<Enter>", lambda e, rr=r: self._snip_hover(rr, True))
             w.bind("<Leave>", lambda e, rr=r: self._snip_hover(rr, False))
@@ -1074,6 +1073,17 @@ class ClipboardManager:
 
     # snippet drag / click
     def _snip_press(self, pos):
+        import time
+        now = time.monotonic()
+        if (pos == getattr(self, "_last_click_pos", None)
+                and now - getattr(self, "_last_click_t", 0.0) < 0.45):
+            self._last_click_t = 0.0          # consume, so a 3rd click starts fresh
+            self._sd_src = None               # cancel any pending drag
+            self._select_snip(pos)
+            self._copy_selected()
+            return
+        self._last_click_t = now
+        self._last_click_pos = pos
         self._sd_src = pos; self._sd_dst = pos; self._sd_moved = False
         self._sd_y0 = self.root.winfo_pointery()
         self._select_snip(pos)
