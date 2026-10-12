@@ -839,10 +839,13 @@ class ClipboardManager:
     # category drag
     def _cat_press(self, pos):
         self._cd_src = pos; self._cd_dst = pos; self._cd_moved = False
+        self._cd_y0 = self.root.winfo_pointery()
 
     def _cat_motion(self, event):
         if self._cd_src is None:
             return
+        if not self._cd_moved and abs(event.y_root - self._cd_y0) < 6:
+            return                      # ignore tiny jitter (e.g. during a double-click)
         self._cd_moved = True
         t = self._row_at_pointer(self._cat_rows, event.y_root)
         if t == 0:                          # can't drop above "All snippets"
@@ -1072,11 +1075,14 @@ class ClipboardManager:
     # snippet drag / click
     def _snip_press(self, pos):
         self._sd_src = pos; self._sd_dst = pos; self._sd_moved = False
+        self._sd_y0 = self.root.winfo_pointery()
         self._select_snip(pos)
 
     def _snip_motion(self, event):
         if self._sd_src is None:
             return
+        if not self._sd_moved and abs(event.y_root - self._sd_y0) < 6:
+            return                      # ignore tiny jitter (e.g. during a double-click)
         self._sd_moved = True
         t = self._row_at_pointer(self._snip_rows, event.y_root)
         if t == self._sd_dst:
@@ -1122,6 +1128,7 @@ class ClipboardManager:
             save_items(self.items)
 
     def _snip_dbl(self, pos):
+        self._sd_src = None             # cancel any pending drag from the two clicks
         self._select_snip(pos)
         self._copy_selected()
 
