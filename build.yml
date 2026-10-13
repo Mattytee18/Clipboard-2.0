@@ -104,8 +104,11 @@ jobs:
           sys.exit(result.returncode)
           "
 
-      - name: Zip app
-        run: cd dist && zip -r "Clipboard-Manager-Mac.zip" "Clipboard Manager.app"
+      - name: Ad-hoc code-sign the app
+        run: codesign --force --deep --sign - "dist/Clipboard Manager.app"
+
+      - name: Zip app (ditto preserves the .app bundle & signature)
+        run: cd dist && ditto -c -k --sequesterRsrc --keepParent "Clipboard Manager.app" "Clipboard-Manager-Mac.zip"
 
       - name: Upload
         uses: actions/upload-artifact@v4
@@ -147,7 +150,10 @@ jobs:
             | 🍎 Mac | `Clipboard-Manager-Mac.zip` — unzip, drag .app to Applications |
 
             > **First launch:** Snippets are pre-loaded automatically.
-            > **Mac:** Right-click the app → Open → Open (bypasses Gatekeeper)
+            > **Mac first open:** If you see "\"Clipboard Manager\" is damaged", it is not —
+            > macOS blocks unsigned apps. Open Terminal and run:
+            > `xattr -cr "/Applications/Clipboard Manager.app"` (adjust the path to where you put it),
+            > then double-click the app.
           files: |
             release/Clipboard Manager.exe
             release/Clipboard-Manager-Mac.zip
