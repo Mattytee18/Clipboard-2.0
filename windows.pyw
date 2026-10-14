@@ -220,19 +220,6 @@ else:
 # ── User settings (persisted) ───────────────────────────────────────────────────
 
 SETTINGS_FILE = os.path.join(os.path.dirname(CATS_FILE), "clipboard_settings.json")
-# ── Update checking ──────────────────────────────────────────────────────────────
-GITHUB_REPO = "Mattytee18/Clipboard-2.0"
-
-
-def _app_build_number():
-    """Current build number, baked in by CI as version.txt; 0 when run from source."""
-    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-    try:
-        with open(os.path.join(base, "version.txt"), "r", encoding="utf-8") as f:
-            digits = "".join(ch for ch in f.read() if ch.isdigit())
-            return int(digits or "0")
-    except Exception:
-        return 0
 
 
 def load_settings():
@@ -440,7 +427,6 @@ class ClipboardManager:
 
         self._settings = load_settings()
         self.density = int(self._settings.get("density", 2))
-        self._build_no = _app_build_number()
         self._active_category = None      # None = "All Snippets"
         self.filtered = []
         self._sel = None                  # selected filtered index
@@ -596,11 +582,6 @@ class ClipboardManager:
                       text_color=COL_MUTED, border_width=1,
                       border_color=COL_BORDER).pack(side="left", fill="x",
                                                     expand=True, padx=(4, 0))
-        ctk.CTkButton(left, text="⟳  Check for updates", command=self._check_updates,
-                      font=self.f_sm, height=32, corner_radius=8,
-                      fg_color="transparent", hover_color=COL_PANEL2,
-                      text_color=COL_MUTED, border_width=1,
-                      border_color=COL_BORDER).pack(fill="x", pady=(6, 0))
 
     # ── Right column ──────────────────────────────────────────────────────────
 
@@ -728,8 +709,9 @@ class ClipboardManager:
         dark = not _mode_is_dark()
         ctk.set_appearance_mode("dark" if dark else "light")
         self._theme_btn.configure(text="🌙" if dark else "☀")
-        self._refresh_cat_list()
-        self._refresh_list()
+        # Recolour existing rows in place — no rebuild, so no flicker or jump.
+        self._paint_snip_selection()
+        self._paint_cat_selection()
 
     # ── Category list ───────────────────────────────────────────────────────────
 
@@ -782,7 +764,7 @@ class ClipboardManager:
     def _paint_cat(self, r, bg, accent=False):
         r["frame"].configure(bg=bg)
         r["name_lbl"].configure(bg=bg, fg=(_c(COL_ACCENT) if accent else _c(COL_TEXT)))
-        r["cnt_lbl"].configure(bg=bg)
+        r["cnt_lbl"].configure(bg=bg, fg=_c(COL_MUTED))
 
     def _cat_hover(self, r, on):
         active = (r["key"] == "__all__" and self._active_category is None) or \
@@ -1021,7 +1003,7 @@ class ClipboardManager:
         r["frame"].configure(bg=bg)
         r["title"].configure(bg=bg, fg=(_c(COL_ACCENT) if accent else _c(COL_TEXT)))
         if r.get("sub"):
-            r["sub"].configure(bg=bg)
+            r["sub"].configure(bg=bg, fg=_c(COL_MUTED))
 
     def _snip_hover(self, r, on):
         if r["pos"] == self._sel:
@@ -1415,165 +1397,6 @@ class ClipboardManager:
         self._refresh_cat_list()
         self._refresh_list()
         self._flash("✓  Imported backup")
-
-    # ── Check for updates (notify only) ──────────────────────────────────────────
-
-    def _check_updates(self):
-        import threading
-        self._flash("Checking for updates…")
-        threading.Thread(target=self._do_update_check, daemon=True).start()
-
-    def _do_update_check(self):
-        import urllib.request
-        try:
-            req = urllib.request.Request(
-                f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
-                headers={"User-Agent": "ClipboardManager",
-                         "Accept": "application/vnd.github+json"})
-            with urllib.request.urlopen(req, timeout=12) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-            tag = data.get("tag_name", "") or ""
-            url = data.get("html_url") or f"https://github.com/{GITHUB_REPO}/releases/latest"
-            latest = int("".join(ch for ch in tag if ch.isdigit()) or "0")
-            asset = self._pick_asset(data.get("assets", []) or [])
-            self.root.after(0, lambda: self._update_result(latest, url, asset))
-        except Exception:
-            self.root.after(0, lambda: self._flash("Couldn't check — are you online?"))
-
-    def _update_result(self, latest, url, asset=None):
-        cur = self._build_no
-        if latest and latest > cur:
-            self._show_update_dialog(latest, cur, url, asset)
-        elif cur:
-            self._flash(f"✓  You're up to date (build {cur})")
-        else:
-            self._flash("✓  You're on the latest version")
-
-    def _show_update_dialog(self, latest, cur, url, asset=None):
-        import webbrowser
-        win = ctk.CTkToplevel(self.root)
-        win.title("Update available")
-        win.configure(fg_color=COL_BG)
-        win.resizable(False, False)
-        win.transient(self.root)
-        wrap = ctk.CTkFrame(win, fg_color="transparent")
-        wrap.pack(fill="both", expand=True, padx=22, pady=20)
-        ctk.CTkLabel(wrap, text="Update available", font=self.f_h,
-                     text_color=COL_TEXT).pack(anchor="w")
-        msg = (f"A newer build is available (build {latest}).\n"
-               f"You have build {cur}." if cur
-               else f"A newer build is available (build {latest}).")
-        ctk.CTkLabel(wrap, text=msg, font=self.f_ui, text_color=COL_MUTED,
-                     justify="left", wraplength=340).pack(anchor="w", pady=(6, 16))
-        btns = ctk.CTkFrame(wrap, fg_color="transparent")
-        btns.pack(fill="x")
-
-        def download():
-            try:
-                webbrowser.open(url)
-                self._flash("Opened download page")
-            except Exception:
-                self._flash("Couldn't open browser")
-            win.destroy()
-
-        can_auto = (sys.platform == "win32" and getattr(sys, "frozen", False)
-                    and bool(asset))
-        if can_auto:
-            def update_now():
-                win.destroy()
-                self._start_self_update(asset)
-            ctk.CTkButton(btns, text="Update now", command=update_now,
-                          font=self.f_ui_b, height=38, corner_radius=10,
-                          fg_color=COL_ACCENT, hover_color=COL_ACCENT_HOV,
-                          text_color="#FFFFFF").pack(side="right")
-        else:
-            ctk.CTkButton(btns, text="Download", command=download, font=self.f_ui_b,
-                          height=38, corner_radius=10, fg_color=COL_ACCENT,
-                          hover_color=COL_ACCENT_HOV, text_color="#FFFFFF").pack(side="right")
-        ctk.CTkButton(btns, text="Later", command=win.destroy, font=self.f_ui,
-                      height=38, width=90, corner_radius=10, fg_color=COL_PANEL2,
-                      hover_color=COL_BORDER, text_color=COL_TEXT
-                      ).pack(side="right", padx=(0, 10))
-        win.after(60, lambda: (win.grab_set(), win.focus_force()))
-        win.geometry(f"+{self.root.winfo_rootx() + 110}+{self.root.winfo_rooty() + 120}")
-
-    def _pick_asset(self, assets):
-        """Pick the release asset for this platform (.exe on Windows, .zip on Mac)."""
-        want = ".exe" if sys.platform == "win32" else ".zip"
-        for a in assets:
-            name = (a.get("name") or "").lower()
-            if name.endswith(want):
-                return a.get("browser_download_url")
-        return None
-
-    def _start_self_update(self, asset_url):
-        import threading
-        self._flash("Downloading update… the app will restart")
-        threading.Thread(target=self._self_update_worker,
-                         args=(asset_url,), daemon=True).start()
-
-    def _self_update_worker(self, asset_url):
-        import urllib.request, os, subprocess, shutil
-        exe = sys.executable
-        exe_dir = os.path.dirname(exe)
-        new_exe = os.path.join(exe_dir, "Clipboard Manager.new.exe")
-        log = os.path.join(exe_dir, "_cm_update.log")
-        try:
-            req = urllib.request.Request(
-                asset_url, headers={"User-Agent": "ClipboardManager"})
-            with urllib.request.urlopen(req, timeout=180) as r, open(new_exe, "wb") as f:
-                shutil.copyfileobj(r, f)
-            if os.path.getsize(new_exe) < 500000:      # a real exe is several MB
-                raise ValueError("downloaded file too small")
-        except Exception:
-            try:
-                if os.path.exists(new_exe):
-                    os.remove(new_exe)
-            except Exception:
-                pass
-            self.root.after(0, lambda: self._flash("Update download failed"))
-            return
-        try:
-            bat = os.path.join(exe_dir, "_cm_update.bat")
-            # Retry the move until the old exe unlocks (i.e. the app has exited),
-            # using ping for delay (timeout needs a console; this script has none).
-            lines = [
-                "@echo off",
-                "setlocal enabledelayedexpansion",
-                'set "LOG=%s"' % log,
-                'echo === update started %date% %time% === > "!LOG!"',
-                "set /a n=0",
-                ":loop",
-                'move /Y "%s" "%s" >> "!LOG!" 2>&1' % (new_exe, exe),
-                "if not errorlevel 1 goto ok",
-                "set /a n+=1",
-                "if !n! GEQ 120 goto giveup",
-                "ping -n 2 127.0.0.1 >nul",
-                "goto loop",
-                ":ok",
-                'echo moved OK, relaunching >> "!LOG!"',
-                'start "" "%s"' % exe,
-                '(goto) 2>nul & del "%~f0"',
-                "exit /b",
-                ":giveup",
-                'echo move failed after retries, relaunching current >> "!LOG!"',
-                'start "" "%s"' % exe,
-                '(goto) 2>nul & del "%~f0"',
-                "exit /b",
-            ]
-            with open(bat, "w", encoding="utf-8") as f:
-                f.write("\r\n".join(lines) + "\r\n")
-            # CREATE_NO_WINDOW alone (it is mutually exclusive with DETACHED_PROCESS;
-            # combining them makes a console window appear).
-            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-            subprocess.Popen(["cmd", "/c", bat], creationflags=flags,
-                             close_fds=True, cwd=exe_dir)
-        except Exception:
-            self.root.after(0, lambda: self._flash("Couldn't start the updater"))
-            return
-        # Exit immediately so the exe unlocks and the helper can replace it on its
-        # first try. All data is saved on every change, so a hard exit is safe.
-        os._exit(0)
 
     def _flash(self, msg):
         if self._status_job:

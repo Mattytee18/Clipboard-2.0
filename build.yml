@@ -28,7 +28,6 @@ jobs:
           python -c "
           import os, subprocess, sys
           files = os.listdir('.')
-          open('version.txt', 'w').write(str(${{ github.run_number }}))
           print('All files:', files)
           assert 'windows.pyw' in files, 'windows.pyw not found!'
           assert 'clipboard_items.json' in files, 'clipboard_items.json not found!'
@@ -40,6 +39,7 @@ jobs:
               '--onefile',
               '--noconfirm',
               '--clean',
+              '--noupx',
               '--hidden-import', 'pyperclip',
               '--collect-all', 'customtkinter',
               '--collect-all', 'darkdetect',
@@ -47,7 +47,6 @@ jobs:
               '--add-data', 'icon.ico;.',
               '--add-data', 'icon.png;.',
               '--add-data', 'clipboard_items.json;.',
-              '--add-data', 'version.txt;.',
               '--add-data', 'clipboard_categories.json;.',
               'windows.pyw'
           ])
@@ -78,7 +77,6 @@ jobs:
           python3 -c "
           import os, subprocess, sys
           files = os.listdir('.')
-          open('version.txt', 'w').write(str(${{ github.run_number }}))
           print('All files:', files)
           assert 'mac.py' in files, 'mac.py not found!'
           assert 'clipboard_items.json' in files, 'clipboard_items.json not found!'
@@ -90,6 +88,7 @@ jobs:
               '--onedir',
               '--noconfirm',
               '--clean',
+              '--noupx',
               '--hidden-import', 'pyperclip',
               '--collect-all', 'customtkinter',
               '--collect-all', 'darkdetect',
@@ -97,7 +96,6 @@ jobs:
               '--osx-bundle-identifier', 'com.clipboardmanager.app',
               '--add-data', 'icon.png:.',
               '--add-data', 'clipboard_items.json:.',
-              '--add-data', 'version.txt:.',
               '--add-data', 'clipboard_categories.json:.',
               'mac.py'
           ])
