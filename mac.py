@@ -1545,40 +1545,61 @@ class ClipboardManager:
         import urllib.request, os, subprocess, shutil
         exe = sys.executable
         exe_dir = os.path.dirname(exe)
-        base = os.path.basename(exe)
         new_exe = os.path.join(exe_dir, "Clipboard Manager.new.exe")
+        log = os.path.join(exe_dir, "_cm_update.log")
         try:
             req = urllib.request.Request(
                 asset_url, headers={"User-Agent": "ClipboardManager"})
             with urllib.request.urlopen(req, timeout=180) as r, open(new_exe, "wb") as f:
                 shutil.copyfileobj(r, f)
+            if os.path.getsize(new_exe) < 500000:      # a real exe is several MB
+                raise ValueError("downloaded file too small")
         except Exception:
+            try:
+                if os.path.exists(new_exe):
+                    os.remove(new_exe)
+            except Exception:
+                pass
             self.root.after(0, lambda: self._flash("Update download failed"))
             return
         try:
             bat = os.path.join(exe_dir, "_cm_update.bat")
+            # Retry the move until the old exe unlocks (i.e. the app has exited),
+            # using ping for delay (timeout needs a console; this script has none).
             lines = [
                 "@echo off",
-                "setlocal",
-                ":wait",
-                'tasklist /FI "IMAGENAME eq %s" | find /I "%s" >nul' % (base, base),
-                "if not errorlevel 1 (",
-                "  timeout /t 1 /nobreak >nul",
-                "  goto wait",
-                ")",
-                'move /Y "%s" "%s" >nul' % (new_exe, exe),
+                "setlocal enabledelayedexpansion",
+                'set "LOG=%s"' % log,
+                'echo === update started %date% %time% === > "!LOG!"',
+                "set /a n=0",
+                ":loop",
+                'move /Y "%s" "%s" >> "!LOG!" 2>&1' % (new_exe, exe),
+                "if not errorlevel 1 goto ok",
+                "set /a n+=1",
+                "if !n! GEQ 120 goto giveup",
+                "ping -n 2 127.0.0.1 >nul",
+                "goto loop",
+                ":ok",
+                'echo moved OK, relaunching >> "!LOG!"',
                 'start "" "%s"' % exe,
-                'del "%~f0"',
+                '(goto) 2>nul & del "%~f0"',
+                "exit /b",
+                ":giveup",
+                'echo move failed after retries, relaunching current >> "!LOG!"',
+                'start "" "%s"' % exe,
+                '(goto) 2>nul & del "%~f0"',
+                "exit /b",
             ]
             with open(bat, "w", encoding="utf-8") as f:
                 f.write("\r\n".join(lines) + "\r\n")
             flags = (getattr(subprocess, "CREATE_NO_WINDOW", 0)
                      | getattr(subprocess, "DETACHED_PROCESS", 0))
-            subprocess.Popen(["cmd", "/c", bat], creationflags=flags, close_fds=True)
+            subprocess.Popen(["cmd", "/c", bat], creationflags=flags,
+                             close_fds=True, cwd=exe_dir)
         except Exception:
             self.root.after(0, lambda: self._flash("Couldn't start the updater"))
             return
-        self.root.after(400, self.root.destroy)
+        self.root.after(600, self.root.destroy)
 
     def _flash(self, msg):
         if self._status_job:
