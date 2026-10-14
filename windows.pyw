@@ -1563,14 +1563,17 @@ class ClipboardManager:
             ]
             with open(bat, "w", encoding="utf-8") as f:
                 f.write("\r\n".join(lines) + "\r\n")
-            flags = (getattr(subprocess, "CREATE_NO_WINDOW", 0)
-                     | getattr(subprocess, "DETACHED_PROCESS", 0))
+            # CREATE_NO_WINDOW alone (it is mutually exclusive with DETACHED_PROCESS;
+            # combining them makes a console window appear).
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
             subprocess.Popen(["cmd", "/c", bat], creationflags=flags,
                              close_fds=True, cwd=exe_dir)
         except Exception:
             self.root.after(0, lambda: self._flash("Couldn't start the updater"))
             return
-        self.root.after(600, self.root.destroy)
+        # Exit immediately so the exe unlocks and the helper can replace it on its
+        # first try. All data is saved on every change, so a hard exit is safe.
+        os._exit(0)
 
     def _flash(self, msg):
         if self._status_job:
